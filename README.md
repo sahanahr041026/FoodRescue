@@ -127,7 +127,7 @@ npm run dev
 - [x] **Phase 1**: Project Setup, Git Architecture, FastAPI Healthcheck & React Homepage
 - [x] **Phase 2**: React Frontend Structure & Routing
 - [x] **Phase 3**: FastAPI Backend Core Setup
-- [ ] **Phase 4**: PostgreSQL Database & SQLAlchemy Models
+- [x] **Phase 4**: PostgreSQL Database & SQLAlchemy Models
 - [ ] **Phase 5**: User Registration & Login
 - [ ] **Phase 6**: JWT Authentication & Security
 - [ ] **Phase 7**: Role-Based Access Control (Provider, NGO, Admin)
