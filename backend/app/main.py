@@ -17,36 +17,79 @@ http://localhost:8000, the browser blocks the request unless the backend explici
 whitelists the frontend's origin in CORS headers. We do that below with CORSMiddleware.
 """
 
-from datetime import datetime, timezone
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from app.config import get_settings
+from app.routers import health, auth, listings, requests, admin
+from app.utils.exceptions import FoodRescueException
+
+# Load centralized settings
+settings = get_settings()
 
 # 1. Initialize FastAPI Application
 app = FastAPI(
-    title="FoodRescue API",
+    title=settings.PROJECT_NAME,
     description="REST API for FoodRescue surplus food redistribution platform.",
-    version="0.1.0",
+    version=settings.VERSION,
     docs_url="/docs",      # Interactive Swagger UI documentation
     redoc_url="/redoc"    # Alternative ReDoc documentation
 )
 
 # 2. Configure CORS (Cross-Origin Resource Sharing)
-# In development, our Vite React frontend runs at http://localhost:5173
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:3000",
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,             # Which domains can talk to this backend
+    allow_origins=settings.CORS_ORIGINS,  # Whitelisted origins from settings (.env)
     allow_credentials=True,
-    allow_methods=["*"],               # Allow all HTTP methods: GET, POST, PUT, DELETE
-    allow_headers=["*"],               # Allow all request headers (e.g. Authorization)
+    allow_methods=["*"],                  # Allow all HTTP methods: GET, POST, PUT, DELETE
+    allow_headers=["*"],                  # Allow all request headers
 )
 
-# 3. Root Endpoint
+# 3. Global Exception Handlers
+@app.exception_handler(FoodRescueException)
+async def domain_exception_handler(request: Request, exc: FoodRescueException):
+    """
+    Catches all custom FoodRescue domain exceptions and transforms them
+    into a standardized, predictable JSON error envelope.
+    """
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": {
+                "code": exc.code,
+                "message": exc.message,
+                "details": exc.details,
+            }
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """
+    Safety net: Catches any unhandled Python exception.
+    Prevents leaking internal stack traces or database connection details to clients.
+    """
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": {
+                "code": "INTERNAL_SERVER_ERROR",
+                "message": "An unexpected server error occurred. Please try again later.",
+                "details": None,
+            }
+        },
+    )
+
+# 4. Mount Modular API Routers
+# All API routers are mounted under the '/api' prefix
+app.include_router(health.router, prefix="/api")
+app.include_router(auth.router, prefix="/api")
+app.include_router(listings.router, prefix="/api")
+app.include_router(requests.router, prefix="/api")
+app.include_router(admin.router, prefix="/api")
+
+# 5. Root Endpoint
 @app.get("/", tags=["General"])
 def read_root():
     """
@@ -56,20 +99,5 @@ def read_root():
         "message": "Welcome to FoodRescue API!",
         "documentation": "/docs",
         "health_check": "/api/health",
-        "version": "0.1.0"
-    }
-
-# 4. Health Check Endpoint
-@app.get("/api/health", tags=["Monitoring"])
-def health_check():
-    """
-    Health Check Endpoint:
-    Used by frontend, monitoring tools, or container orchestrators
-    to verify that the backend server is running and responsive.
-    """
-    return {
-        "status": "ok",
-        "service": "FoodRescue API",
-        "version": "0.1.0",
-        "timestamp": datetime.now(timezone.utc).isoformat()
+        "version": settings.VERSION
     }
